@@ -18,3 +18,4 @@ axios.get('https://api.aviationstack.com/v1/flights', {params})
   }).catch(error => {
     console.log(error);
   });
+  
