@@ -1,28 +1,84 @@
-// Load environment variables from .env.local file
-require('dotenv').config({ path: '.env.local' });
-
-// Import necessary modules
 const express = require('express');
-const axios = require('./node_modules/axios/index.d.cts');
+const axios = require('axios');
 const cors = require('cors');
+require('dotenv').config();
 
-// Initialize Express app
 const app = express();
-const PORT = 5001; // Server will run on port 5001
+const PORT = process.env.PORT || 5001;
 
-// Enable CORS to allow cross-origin requests from the frontend
+// Enable CORS for frontend communication
 app.use(cors());
 
-// Get the API key from environment variables
-const API_KEY = process.env.AVIATION_STACK_API_KEY;
+// Hardcoded AviationStack API Key (ensure to move back to environment variable after fixing)
+const API_KEY = '84afc636d2ec960016b8485444b88f5b'; // Replace with your actual API key
 
-// Route to get flight information by flight number
-app.get('/flight/:flightNumber', async (req, res) => {
+// Add logging to check the coordinates received from the API
+function filterDFWFlights(flights) {
+  return flights.filter(flight => {
+    const dep_iata = flight.departure?.iata || '';
+    const arr_iata = flight.arrival?.iata || '';
+    
+    // Check if the flight is related to DFW
+    const isDFW = dep_iata === 'DFW' || arr_iata === 'DFW';
+    
+    // Log coordinates for debugging
+    if (isDFW) {
+      const depLat = flight.departure?.location?.lat || 'No Latitude';
+      const depLon = flight.departure?.location?.lon || 'No Longitude';
+      const arrLat = flight.arrival?.location?.lat || 'No Latitude';
+      const arrLon = flight.arrival?.location?.lon || 'No Longitude';
+      
+      console.log(`DFW-related Flight Found: ${dep_iata} -> ${arr_iata}`);
+      console.log(`Departure Coordinates: Lat ${depLat}, Lon ${depLon}`);
+      console.log(`Arrival Coordinates: Lat ${arrLat}, Lon ${arrLon}`);
+    }
+    
+    return isDFW;
+  });
+}
+
+
+function formatFlightData(flight) {
+  return {
+    departure: {
+      airport: flight.departure.airport,
+      location: {
+        lat: flight.departure.latitude || null,
+        lon: flight.departure.longitude || null
+      },
+      scheduled: flight.departure.scheduled || 'Unknown',
+      estimated: flight.departure.estimated || 'Unknown',
+      actual: flight.departure.actual || 'Unknown'
+    },
+    arrival: {
+      airport: flight.arrival.airport,
+      location: {
+        lat: flight.arrival.latitude || null,
+        lon: flight.arrival.longitude || null
+      },
+      scheduled: flight.arrival.scheduled || 'Unknown',
+      estimated: flight.arrival.estimated || 'Unknown',
+      actual: flight.arrival.actual || 'Unknown'
+    },
+    live: flight.live && flight.live.latitude !== null && flight.live.longitude !== null ? {
+      latitude: flight.live.latitude,
+      longitude: flight.live.longitude,
+      altitude: flight.live.altitude,
+      speed: flight.live.speed_horizontal
+    } : null,
+    airline: flight.airline.name,
+    flightNumber: flight.flight.number
+  };
+}
+
+
+
+
+// Route to search flights by flight number
+app.get('/api/flights/number/:flightNumber', async (req, res) => {
   const flightNumber = req.params.flightNumber;
-  console.log(`Received request for flight number: ${flightNumber}`);
-
   try {
-    // Make a request to the AviationStack API
+    console.log(`Searching for flight number: ${flightNumber}`);
     const response = await axios.get('http://api.aviationstack.com/v1/flights', {
       params: {
         access_key: API_KEY,
@@ -30,31 +86,45 @@ app.get('/flight/:flightNumber', async (req, res) => {
       },
     });
 
-    const flightData = response.data.data[0];
+    const dfwFlights = filterDFWFlights(response.data.data).map(formatFlightData);
 
-    if (flightData) {
-      // Prepare relevant flight information
-      const flightInfo = {
-        departure_city: flightData.departure.airport || 'Unknown',
-        arrival_city: flightData.arrival.airport || 'Unknown',
-        time_departed: flightData.departure.actual || 'N/A',
-        time_landed: flightData.arrival.actual || 'N/A',
-        is_in_air: flightData.live && !flightData.live.is_ground, // Check if flight is in the air
-      };
-
-      console.log('Sending Flight Info:', flightInfo);
-      res.json(flightInfo); // Send flight data as JSON
-    } else {
-      console.log('No flight data found.');
-      res.status(404).json({ message: 'Flight not found' });
+    if (dfwFlights.length === 0) {
+      return res.status(404).json({ message: 'Flight not related to DFW' });
     }
+
+    res.json(dfwFlights);
   } catch (error) {
-    console.error('Error fetching flight data:', error.response ? error.response.data : error.message);
-    res.status(500).json({ error: 'Error fetching flight data' });
+    console.error('Error fetching flight data:', error.message);
+    res.status(500).json({ message: 'Error fetching flight data', details: error.message });
+  }
+});
+
+// Route to search flights by date
+app.get('/api/flights/date/:date', async (req, res) => {
+  const date = req.params.date; // Format: YYYY-MM-DD
+  try {
+    console.log(`Searching for flights on date: ${date}`);
+    const response = await axios.get('http://api.aviationstack.com/v1/flights', {
+      params: {
+        access_key: API_KEY,
+        flight_date: date,
+      },
+    });
+
+    const dfwFlights = filterDFWFlights(response.data.data).map(formatFlightData);
+
+    if (dfwFlights.length === 0) {
+      return res.status(404).json({ message: 'No flights related to DFW for this date' });
+    }
+
+    res.json(dfwFlights);
+  } catch (error) {
+    console.error('Error fetching flight data by date:', error.message);
+    res.status(500).json({ message: 'Error fetching flight data', details: error.message });
   }
 });
 
 // Start the server
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });
