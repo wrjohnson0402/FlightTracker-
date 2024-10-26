@@ -34,6 +34,7 @@ This is a full-stack Flight Tracker application built with a Node.js backend and
     ├── src/
     │   ├── components/
     │   │   └── FlightSearch.js
+    |   |   └── FlightsMap.js
     │   ├── App.js
     │   ├── index.js
     │   └── styles/
