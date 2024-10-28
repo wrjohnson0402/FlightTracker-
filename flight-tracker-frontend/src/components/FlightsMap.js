@@ -1,21 +1,34 @@
 import React, { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import FlightPath from './FlightPath';
 
 // Helper function to validate if a coordinate is correct
 const isValidCoordinate = (lat, lon) => lat !== null && lon !== null && !isNaN(lat) && !isNaN(lon);
+
+// Airport coordinates database
+const AIRPORT_COORDINATES = {
+  "Dallas/Fort Worth International": [32.8998, -97.0403],
+  "Los Angeles International": [33.9416, -118.4085],
+  // Add more airports as needed
+};
 
 const FlightsMap = ({ flights }) => {
   const mapCenter = [32.8998, -97.0403]; // DFW Airport coordinates
   const mapZoom = 7;
 
-  // Debugging: Log the flights data to ensure it's correct
-  useEffect(() => {
-    console.log('Flights data:', JSON.stringify(flights, null, 2));
-  }, [flights]);
-
   // Helper function to determine if a flight is live
   const isLiveFlight = (flight) => flight.live && isValidCoordinate(flight.live.latitude, flight.live.longitude);
+
+  // Helper function to get coordinates for an airport
+  const getAirportCoordinates = (airportName) => {
+    const coords = AIRPORT_COORDINATES[airportName];
+    if (!coords) {
+      console.warn(`Missing coordinates for airport: ${airportName}`);
+      return null;
+    }
+    return coords;
+  };
 
   return (
     <div style={{ height: '600px', width: '100%' }}>
@@ -28,66 +41,54 @@ const FlightsMap = ({ flights }) => {
 
         {/* Render flights data if available */}
         {flights.map((flight, index) => {
-          // Validate the coordinates before using them
-          const departurePosition = isValidCoordinate(flight.departure.location.lat, flight.departure.location.lon)
-            ? [flight.departure.location.lat, flight.departure.location.lon]
-            : null;
-
-          const arrivalPosition = isValidCoordinate(flight.arrival.location.lat, flight.arrival.location.lon)
-            ? [flight.arrival.location.lat, flight.arrival.location.lon]
-            : null;
-
+          // Get departure and arrival coordinates from our database
+          const departurePosition = getAirportCoordinates(flight.departure.airport);
+          const arrivalPosition = getAirportCoordinates(flight.arrival.airport);
           const livePosition = isLiveFlight(flight)
             ? [flight.live.latitude, flight.live.longitude]
             : null;
 
           return (
             <React.Fragment key={index}>
-              {/* Render a red dot for departure airport */}
+              {/* Render departure airport */}
               {departurePosition && (
                 <Marker position={departurePosition}>
                   <Popup>
-                    <strong>Departure Airport: {flight.departure.airport}</strong><br />
-                    Scheduled: {flight.departure.scheduled}<br />
-                    Estimated: {flight.departure.estimated}<br />
-                    Actual: {flight.departure.actual}
+                    <strong>Departure: {flight.departure.airport}</strong><br />
+                    Scheduled: {new Date(flight.departure.scheduled).toLocaleString()}<br />
+                    {flight.departure.actual && `Actual: ${new Date(flight.departure.actual).toLocaleString()}`}
                   </Popup>
-                  <Circle center={departurePosition} pathOptions={{ color: 'red' }} radius={10000} />
+                  <Circle center={departurePosition} pathOptions={{ color: 'green' }} radius={10000} />
                 </Marker>
               )}
-              {/* Render a red dot for arrival airport */}
+
+              {/* Render arrival airport */}
               {arrivalPosition && (
                 <Marker position={arrivalPosition}>
                   <Popup>
-                    <strong>Arrival Airport: {flight.arrival.airport}</strong><br />
-                    Scheduled: {flight.arrival.scheduled}<br />
-                    Estimated: {flight.arrival.estimated}<br />
-                    Actual: {flight.arrival.actual}
+                    <strong>Arrival: {flight.arrival.airport}</strong><br />
+                    Scheduled: {new Date(flight.arrival.scheduled).toLocaleString()}<br />
+                    {flight.arrival.actual && `Actual: ${new Date(flight.arrival.actual).toLocaleString()}`}
                   </Popup>
                   <Circle center={arrivalPosition} pathOptions={{ color: 'red' }} radius={10000} />
                 </Marker>
               )}
-              {/* Render a blue dot if the flight is live */}
+
+              {/* Render live aircraft position */}
               {livePosition && (
                 <Marker position={livePosition}>
                   <Popup>
                     <strong>{flight.airline} Flight {flight.flightNumber}</strong><br />
-                    <strong>Live Location</strong><br />
-                    Altitude: {flight.live.altitude} meters<br />
-                    Speed: {flight.live.speed} km/h<br />
-                    <strong>Flight Details:</strong><br />
-                    <em>Departure:</em> {flight.departure.airport}<br />
-                    <em>Arrival:</em> {flight.arrival.airport}<br />
-                    Scheduled Departure: {flight.departure.scheduled}<br />
-                    Estimated Departure: {flight.departure.estimated}<br />
-                    Actual Departure: {flight.departure.actual}<br />
-                    Scheduled Arrival: {flight.arrival.scheduled}<br />
-                    Estimated Arrival: {flight.arrival.estimated}<br />
-                    Actual Arrival: {flight.arrival.actual}
+                    <strong>Live Data:</strong><br />
+                    Altitude: {Math.round(flight.live.altitude)} meters<br />
+                    Speed: {Math.round(flight.live.speed)} km/h
                   </Popup>
                   <Circle center={livePosition} pathOptions={{ color: 'blue' }} radius={5000} />
                 </Marker>
               )}
+
+              {/* Add the flight path only for live flights */}
+              {livePosition && <FlightPath flight={flight} />}
             </React.Fragment>
           );
         })}
